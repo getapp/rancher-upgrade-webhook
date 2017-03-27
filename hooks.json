@@ -3,7 +3,7 @@
     "id": "rancher-upgrade",
     "execute-command": "/opt/hooks/rancher-upgrade.sh",
     "command-working-directory": "/opt/hooks",
-    "include-command-output-in-response": true,
+    "include-command-output-in-response": false,
     "pass-arguments-to-command":
     [
       {
