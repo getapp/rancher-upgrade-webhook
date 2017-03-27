@@ -1,0 +1,19 @@
+[
+  {
+    "id": "rancher-upgrade",
+    "execute-command": "/opt/hooks/rancher-upgrade.sh",
+    "command-working-directory": "/opt/hooks",
+    "include-command-output-in-response": true,
+    "pass-arguments-to-command":
+    [
+      {
+        "source": "payload",
+        "name": "docker_url"
+      },
+      {
+        "source": "payload",
+        "name": "docker_tags.0"
+      }
+    ]
+  }
+]
