@@ -1,6 +1,6 @@
 FROM almir/webhook
 
-ADD hooks /opt/
+ADD hooks/ /opt/hooks/
 ADD hooks.json /etc/webhook/hooks.json
 # copied from https://raw.githubusercontent.com/etlweather/gaucho
 ADD rancher.py /bin/
