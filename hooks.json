@@ -13,10 +13,6 @@
       {
         "source": "payload",
         "name": "docker_tags.0"
-      },
-      {
-        "source": "payload",
-        "name": "trigger_metadata.commit_info.author.username"
       }
     ]
   }
