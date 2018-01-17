@@ -12,18 +12,19 @@ HOST = "http://rancher.local:8080/v1"
 URL_SERVICE = "/services/"
 USERNAME = "userid"
 PASSWORD = "password"
+kwargs = {}
 
 # HTTP
 def get(url):
-   r = requests.get(url, auth=(USERNAME, PASSWORD))
+   r = requests.get(url, auth=(USERNAME, PASSWORD), **kwargs)
    r.raise_for_status()
    return r
 
-def post(url, data):
+def post(url, data=""):
    if data:
-      r = requests.post(url, data=json.dumps(data), auth=(USERNAME, PASSWORD))
+      r = requests.post(url, data=json.dumps(data), auth=(USERNAME, PASSWORD), **kwargs)
    else:
-      r = requests.post(url, data="", auth=(USERNAME, PASSWORD))
+      r = requests.post(url, data="", auth=(USERNAME, PASSWORD), **kwargs)
    r.raise_for_status()
    return r.json()
 
@@ -66,13 +67,20 @@ def id_of (name=""):
    service = get(HOST + "/services?name=" + name).json()
    return service['data'][0]['id']
 
-
-
 #
 # Start containers within a service (e.g. for Start Once containers).
 #
 @baker.command(params={"service_id": "The ID of the service to start the containers of."})
 def start_containers (service_id):
+   """Starts the containers of a given service, typically a Start Once service.
+   """
+   start_service (service_id)
+
+#
+# Start containers within a service (e.g. for Start Once containers).
+#
+@baker.command(params={"service_id": "The ID of the service to start the containers of."})
+def start_service (service_id):
    """Starts the containers of a given service, typically a Start Once service.
    """
 
@@ -83,6 +91,37 @@ def start_containers (service_id):
       print "Starting container %s with url %s" % (container['name'], start_url)
       post(start_url, "")
 
+
+#
+# Stop containers within a service.
+#
+@baker.command(params={"service_id": "The ID of the service to stop the containers of."})
+def stop_service (service_id):
+   """Stop the containers of a given service.
+   """
+
+   # Get the array of containers
+   containers = get(HOST + URL_SERVICE + service_id + "/instances").json()['data']
+   for container in containers:
+      stop_url = container['actions']['stop']
+      print "Stopping container %s with url %s" % (container['name'], stop_url)
+      post(stop_url, "")
+
+
+#
+# Restart containers within a service
+#
+@baker.command(params={"service_id": "The ID of the service to restart the containers of."})
+def restart_service(service_id):
+  """Restart the containers of a given service.
+  """
+
+  # Get the array of containers
+  containers = get(HOST + URL_SERVICE + service_id + "/instances").json()['data']
+  for container in containers:
+      restart_url = container['actions']['restart']
+      print "Restarting container: " + container['name']
+      post(restart_url)
 
 
 #
@@ -240,6 +279,8 @@ def execute(service_id,command):
 
   print "DONE"
 
+
+
 #
 # Rollback the service.
 #
@@ -284,6 +325,78 @@ def rollback(service_id, timeout=60):
    else:
       print "Rolled back"
 
+
+#
+# Activate a service.
+#
+@baker.command(params={"service_id": "The ID of the service to deactivate.",
+                        "timeout": "How many seconds to wait until an upgrade fails"})
+def activate (service_id, timeout=60):
+   """Activate the containers of a given service.
+   """
+
+   r = get(HOST + URL_SERVICE + service_id)
+   current_service_config = r.json()
+
+   # can't deactivate a service if it's not in active state
+   if current_service_config['state'] != "inactive":
+      print "Service cannot be deactivated due to its current state: %s" % current_service_config['state']
+      sys.exit(1)
+
+   post(current_service_config['actions']['activate'], "");
+
+   # Wait deactivation to finish
+   sleep_count = 0
+   while current_service_config['state'] != "active" and sleep_count < timeout // 2:
+      print "Waiting for activation to finish..."
+      time.sleep (2)
+      r = get(HOST + URL_SERVICE + service_id)
+      current_service_config = r.json()
+      sleep_count += 1
+
+
+#
+# Deactivate a service.
+#
+@baker.command(params={"service_id": "The ID of the service to deactivate.",
+                        "timeout": "How many seconds to wait until an upgrade fails"})
+def deactivate (service_id, timeout=60):
+   """Stops the containers of a given service. (e.g. for maintenance purposes)
+   """
+
+   r = get(HOST + URL_SERVICE + service_id)
+   current_service_config = r.json()
+
+   # can't deactivate a service if it's not in active state
+   if current_service_config['state'] != "active":
+      print "Service cannot be deactivated due to its current state: %s" % current_service_config['state']
+      sys.exit(1)
+
+   post(current_service_config['actions']['deactivate'], "");
+
+   # Wait deactivation to finish
+   sleep_count = 0
+   while current_service_config['state'] != "inactive" and sleep_count < timeout // 2:
+      print "Waiting for deactivation to finish..."
+      time.sleep (2)
+      r = get(HOST + URL_SERVICE + service_id)
+      current_service_config = r.json()
+      sleep_count += 1
+
+
+
+#
+# Get a service state
+#
+@baker.command(default=True, params={"service_id": "The ID of the service to read"})
+def state(service_id=""):
+   """Retrieves the service state information.
+   """
+
+   r = get(HOST + URL_SERVICE + service_id)
+   print(r.json()["state"])
+
+
 #
 # Script's entry point, starts Baker to execute the commands.
 # Attempts to read environment variables to configure the program.
@@ -310,6 +423,12 @@ if __name__ == '__main__':
 
    if 'RANCHER_URL' in os.environ:
       HOST = os.environ['RANCHER_URL']
+
+   if 'SSL_VERIFY' in os.environ:
+      if os.environ['SSL_VERIFY'].lower() == "false":
+        kwargs['verify'] = False
+      else:
+        kwargs['verify'] = os.environ['SSL_VERIFY']
 
    # make sure host ends with v1 if it is not contained in host
    if '/v1' not in HOST:
